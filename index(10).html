@@ -1814,7 +1814,17 @@ async function loadAdminTab(){
 
 // ─── DASHBOARD + ORDERS (OrderFlow style) ────────────────────
 function getMonthLabel(y,m){return new Date(y,m,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});}
-function filteredOrdersForMonth(y,m){return adminOrders.filter(o=>{const d=new Date(o.created_at);return d.getFullYear()===y&&d.getMonth()===m;});}
+function getOrderTimelineDate(o){
+  const purchase=getOrderField(o,['purchase_date','purchaseDate'],getOrderField(getOrderMeta(o),['purchase_date','purchaseDate'],''));
+  if(purchase){
+    const pd=new Date(purchase);
+    if(!Number.isNaN(pd.getTime())) return pd;
+  }
+  const cd=new Date(o.created_at);
+  if(!Number.isNaN(cd.getTime())) return cd;
+  return new Date();
+}
+function filteredOrdersForMonth(y,m){return adminOrders.filter(o=>{const d=getOrderTimelineDate(o);return d.getFullYear()===y&&d.getMonth()===m;});}
 
 function getOrderField(o, keys=[], fallback=''){
   for(const key of keys){
@@ -1992,7 +2002,7 @@ function renderAdminDash(){
   const dailyRevenue=Array(daysInMonth).fill(0);
   const dailyOrders=Array(daysInMonth).fill(0);
   orders.forEach(o=>{
-    const day=new Date(o.created_at).getDate()-1;
+    const day=getOrderTimelineDate(o).getDate()-1;
     if(day>=0&&day<daysInMonth){dailyRevenue[day]+=getOrderSell(o);dailyOrders[day]++;}
   });
   const labels=Array.from({length:daysInMonth},(_,i)=>String(i+1));
