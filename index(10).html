@@ -1848,13 +1848,13 @@ function getOrderMeta(o){
   return (meta&&typeof meta==='object')?meta:{};
 }
 function getOrderSell(o){
-  const direct=getOrderNumber(o,['sell_price','sellPrice','price','total'],NaN);
+  const direct=getOrderNumber(o,['sell_price','sellPrice','selling_price','sellingPrice','sell','price','amount','total'],NaN);
   if(Number.isFinite(direct)) return direct;
   const meta=getOrderMeta(o);
-  const fromMeta=getOrderNumber(meta,['sell_price','sellPrice','price','total'],NaN);
+  const fromMeta=getOrderNumber(meta,['sell_price','sellPrice','selling_price','sellingPrice','sell','price','amount','total'],NaN);
   if(Number.isFinite(fromMeta)) return fromMeta;
   const firstItem=getOrderItems(o)[0]||{};
-  const fromItem=getOrderNumber(firstItem,['price','sell_price','sellPrice','total'],NaN);
+  const fromItem=getOrderNumber(firstItem,['price','sell_price','sellPrice','selling_price','sellingPrice','sell','amount','total'],NaN);
   if(Number.isFinite(fromItem)) return fromItem;
   const fromPriceOption=getOrderNumber(firstItem?.priceOption||{},['price'],NaN);
   if(Number.isFinite(fromPriceOption)) return fromPriceOption;
@@ -1865,13 +1865,13 @@ function getOrderSell(o){
   return Number.isFinite(fromItem)?fromItem:0;
 }
 function getOrderCost(o){
-  const direct=getOrderNumber(o,['cost','cost_price','costPrice','buy_price','buyPrice'],NaN);
+  const direct=getOrderNumber(o,['cost','cost_to_me','costToMe','cost_price','costPrice','buy_price','buyPrice','buy'],NaN);
   if(Number.isFinite(direct)) return direct;
   const meta=getOrderMeta(o);
-  const metaCost=getOrderNumber(meta,['cost','cost_price','costPrice','buy_price','buyPrice'],NaN);
+  const metaCost=getOrderNumber(meta,['cost','cost_to_me','costToMe','cost_price','costPrice','buy_price','buyPrice','buy'],NaN);
   if(Number.isFinite(metaCost)) return metaCost;
   const firstItem=getOrderItems(o)[0]||{};
-  const itemCost=getOrderNumber(firstItem,['cost','cost_price','costPrice','buy_price','buyPrice'],NaN);
+  const itemCost=getOrderNumber(firstItem,['cost','cost_to_me','costToMe','cost_price','costPrice','buy_price','buyPrice','buy'],NaN);
   if(Number.isFinite(itemCost)) return itemCost;
   return 0;
 }
@@ -1914,6 +1914,11 @@ function getOrderProduct(o){
   }
   return 'Unknown';
 }
+function getOrderProfit(o){
+  const direct=getOrderNumber(o,['profit','net_profit','netProfit'],NaN);
+  if(Number.isFinite(direct)) return direct;
+  return getOrderSell(o)-getOrderCost(o);
+}
 
 // Subscription status helpers (for OrderFlow orders stored in Supabase)
 function getSubStatus(o){
@@ -1950,12 +1955,14 @@ function renderAdminDash(){
   const content=document.getElementById('admin-tab-content');if(!content)return;
   const orders=filteredOrdersForMonth(adminYear,adminMonth);
   // KPIs
-  let totalRevenue=0,totalCost=0,activeCount=0,expiredCount=0,soonCount=0,paidCount=0,unpaidCount=0;
+  let totalRevenue=0,totalCost=0,totalProfit=0,activeCount=0,expiredCount=0,soonCount=0,paidCount=0,unpaidCount=0;
   const productMap={},resellerMap={};
   orders.forEach(o=>{
     const sell=getOrderSell(o);
     const cost=getOrderCost(o);
+    const profit=getOrderProfit(o);
     totalRevenue+=sell;totalCost+=cost;
+    totalProfit+=profit;
     // subscription status — use purchase_date OR created_at as start date
     const st=getSubStatus(o);
     if(st==='active')activeCount++;
@@ -1977,7 +1984,6 @@ function renderAdminDash(){
       resellerMap[resellerName].cost+=cost;
     }
   });
-  const totalProfit=totalRevenue-totalCost;
   const avgOrder=orders.length?(totalRevenue/orders.length):0;
 
   // Daily chart data
@@ -2073,7 +2079,7 @@ function renderAdminOrders(){
     const dotColor=subStatusDot(status);
     const sell=getOrderSell(o);
     const cost=getOrderCost(o);
-    const profit=(sell-cost).toFixed(2);
+    const profit=getOrderProfit(o).toFixed(2);
     const expiry=getExpiryDate(o);
     const expiryStr=expiry?expiry.toLocaleDateString():'—';
     const isPaid=o.payment_status==='paid'||o.status==='delivered';
@@ -2148,7 +2154,7 @@ function filterAdminOrders(){
   if(!filtered.length){tbody.innerHTML=`<tr><td colspan="13" style="padding:60px;text-align:center;color:var(--text3)">No matching orders.</td></tr>`;return;}
   tbody.innerHTML=filtered.map(o=>{
     const status=getSubStatus(o),dotColor=subStatusDot(status);
-    const sell=getOrderSell(o),cost=getOrderCost(o),profit=(sell-cost).toFixed(2);
+    const sell=getOrderSell(o),cost=getOrderCost(o),profit=getOrderProfit(o).toFixed(2);
     const expiry=getExpiryDate(o),expiryStr=expiry?expiry.toLocaleDateString():'—';
     const isPaid=o.payment_status==='paid'||o.status==='delivered';
     return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="showOrderDetail('${o.id}')">
@@ -2175,7 +2181,7 @@ function filterAdminOrders(){
 function showOrderDetail(id){
   const o=adminOrders.find(x=>x.id===id);if(!o)return;
   const status=getSubStatus(o),expiry=getExpiryDate(o);
-  const sell=getOrderSell(o),cost=getOrderCost(o),profit=(sell-cost).toFixed(2);
+  const sell=getOrderSell(o),cost=getOrderCost(o),profit=getOrderProfit(o).toFixed(2);
   const overlay=document.getElementById('order-detail-overlay');
   const modal=document.getElementById('order-detail-modal');
   if(!overlay||!modal)return;
