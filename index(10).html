@@ -2280,8 +2280,8 @@ function renderOfStep(){
     <div style="display:flex;justify-content:flex-end"><button class="btn-primary" style="padding:12px 28px" onclick="ofNext()">Next →</button></div>`;}
   else if(ofStep===2){body.innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
-      <div class="form-group"><label class="form-label">Cost (to me $)</label><input class="form-input" type="number" id="cost" step="0.01" value="${ofFormData.cost||''}" oninput="updateOfProfit()"/></div>
-      <div class="form-group"><label class="form-label">Selling Price $</label><input class="form-input" type="number" id="sellPrice" step="0.01" value="${ofFormData.sellPrice||''}" oninput="updateOfProfit()"/></div>
+      <div class="form-group"><label class="form-label">Cost (to me $)</label><input class="form-input" type="text" inputmode="decimal" id="cost" value="${ofFormData.cost||''}" oninput="updateOfProfit()" placeholder="e.g. 12.5 or 12,5"/></div>
+      <div class="form-group"><label class="form-label">Selling Price $</label><input class="form-input" type="text" inputmode="decimal" id="sellPrice" value="${ofFormData.sellPrice||''}" oninput="updateOfProfit()" placeholder="e.g. 20 or 20,0"/></div>
     </div>
     <div id="of-profit-row" style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;font-size:13px">
       <span style="color:var(--text3)">Profit Preview</span>
@@ -2315,8 +2315,9 @@ function renderOfStep(){
 }
 
 function updateOfProfit(){
-  const c=parseFloat(document.getElementById('cost')?.value||0);
-  const s=parseFloat(document.getElementById('sellPrice')?.value||0);
+  const parseMoney=v=>parseFloat(String(v||'0').replace(/[^0-9.,-]/g,'').replace(',','.'))||0;
+  const c=parseMoney(document.getElementById('cost')?.value||0);
+  const s=parseMoney(document.getElementById('sellPrice')?.value||0);
   const el=document.getElementById('of-profit-val');
   if(el){const p=s-c;el.textContent='$'+p.toFixed(2);el.style.color=p>=0?'#43e97b':'#ff4d6d';}
 }
@@ -2351,9 +2352,10 @@ async function ofSubmit(){
   // Validate required
   if(!ofFormData.customerName){showToast('Customer name is required',true);return;}
   if(!ofFormData.product){showToast('Product name is required',true);return;}
+  const parseMoney=v=>parseFloat(String(v||'0').replace(/[^0-9.,-]/g,'').replace(',','.'))||0;
   // Ensure numeric fields are actually numbers
-  ofFormData.cost = parseFloat(String(ofFormData.cost||'0'))||0;
-  ofFormData.sellPrice = parseFloat(String(ofFormData.sellPrice||'0'))||0;
+  ofFormData.cost = parseMoney(ofFormData.cost);
+  ofFormData.sellPrice = parseMoney(ofFormData.sellPrice);
   const id = ofEditingId || 'ORD-' + Date.now();
 
   // Full order with all new columns
@@ -2366,9 +2368,9 @@ async function ofSubmit(){
     purchase_date:  ofFormData.purchaseDate  || new Date().toISOString().slice(0,10),
     duration:       ofFormData.duration      || 'monthly',
     custom_duration:ofFormData.duration==='custom' ? (parseInt(ofFormData.customDuration)||30) : null,
-    cost:           parseFloat(String(ofFormData.cost||'0').replace(',','.')||'0')||0,
-    sell_price:     parseFloat(String(ofFormData.sellPrice||'0').replace(',','.')||'0')||0,
-    total:          parseFloat(String(ofFormData.sellPrice||'0').replace(',','.')||'0')||0,
+    cost:           parseMoney(ofFormData.cost),
+    sell_price:     parseMoney(ofFormData.sellPrice),
+    total:          parseMoney(ofFormData.sellPrice),
     payment_status: ofFormData.paymentStatus || 'unpaid',
     status:         ofFormData.paymentStatus==='paid' ? 'delivered' : 'pending',
     provider:       ofFormData.provider      || '',
