@@ -1826,7 +1826,8 @@ function getOrderField(o, keys=[], fallback=''){
 function getOrderNumber(o, keys=[], fallback=0){
   const raw=getOrderField(o,keys,'');
   if(raw==='') return fallback;
-  const n=parseFloat(String(raw).replace(',','.'));
+  const cleaned=String(raw).replace(/[^0-9.,-]/g,'').replace(',', '.');
+  const n=parseFloat(cleaned);
   return Number.isFinite(n)?n:fallback;
 }
 function getOrderItems(o){return Array.isArray(o?.items)?o.items:[];}
@@ -1838,13 +1839,30 @@ function getOrderMeta(o){
 function getOrderSell(o){
   const direct=getOrderNumber(o,['sell_price','sellPrice','price','total'],NaN);
   if(Number.isFinite(direct)) return direct;
-  const fromItem=parseFloat(getOrderItems(o)[0]?.priceOption?.price);
+  const meta=getOrderMeta(o);
+  const fromMeta=getOrderNumber(meta,['sell_price','sellPrice','price','total'],NaN);
+  if(Number.isFinite(fromMeta)) return fromMeta;
+  const firstItem=getOrderItems(o)[0]||{};
+  const fromItem=getOrderNumber(firstItem,['price','sell_price','sellPrice','total'],NaN);
+  if(Number.isFinite(fromItem)) return fromItem;
+  const fromPriceOption=getOrderNumber(firstItem?.priceOption||{},['price'],NaN);
+  if(Number.isFinite(fromPriceOption)) return fromPriceOption;
+  const fromItemParse=parseFloat(String(firstItem?.priceOption?.price||'').replace(/[^0-9.,-]/g,'').replace(',', '.'));
+  if(Number.isFinite(fromItemParse)) return fromItemParse;
+  const fromItemLegacy=parseFloat(String(firstItem?.price||'').replace(/[^0-9.,-]/g,'').replace(',', '.'));
+  if(Number.isFinite(fromItemLegacy)) return fromItemLegacy;
   return Number.isFinite(fromItem)?fromItem:0;
 }
 function getOrderCost(o){
   const direct=getOrderNumber(o,['cost','cost_price','costPrice','buy_price','buyPrice'],NaN);
   if(Number.isFinite(direct)) return direct;
-  return getOrderNumber(getOrderMeta(o),['cost'],0);
+  const meta=getOrderMeta(o);
+  const metaCost=getOrderNumber(meta,['cost','cost_price','costPrice','buy_price','buyPrice'],NaN);
+  if(Number.isFinite(metaCost)) return metaCost;
+  const firstItem=getOrderItems(o)[0]||{};
+  const itemCost=getOrderNumber(firstItem,['cost','cost_price','costPrice','buy_price','buyPrice'],NaN);
+  if(Number.isFinite(itemCost)) return itemCost;
+  return 0;
 }
 function getOrderEmail(o){
   const direct=getOrderField(o,['sub_email','subEmail','customer_email','email'],'');
@@ -1861,7 +1879,10 @@ function getOrderDurationText(o){
 function getOrderResellerName(o){
   const direct=getOrderField(o,['reseller_name','resellerName'],'');
   if(direct) return direct;
-  return getOrderField(getOrderMeta(o),['reseller_name','resellerName'],'');
+  const metaName=getOrderField(getOrderMeta(o),['reseller_name','resellerName'],'');
+  if(metaName) return metaName;
+  const firstItem=getOrderItems(o)[0]||{};
+  return getOrderField(firstItem,['reseller_name','resellerName','reseller'],'');
 }
 function getOrderProvider(o){
   const direct=getOrderField(o,['provider'],'');
@@ -1871,7 +1892,8 @@ function getOrderProvider(o){
 function isResellerOrder(o){
   const meta=getOrderMeta(o);
   const resellerFlag=String(getOrderField(o,['reseller'],getOrderField(meta,['reseller'],''))).toLowerCase();
-  return resellerFlag==='yes'||resellerFlag==='true'||o?.reseller===true;
+  if(resellerFlag==='yes'||resellerFlag==='true'||o?.reseller===true) return true;
+  return !!getOrderResellerName(o);
 }
 function getOrderProduct(o){
   const direct=getOrderField(o,['product'],'');
@@ -2333,7 +2355,7 @@ async function ofSubmit(){
     payment_status: ofFormData.paymentStatus || 'unpaid',
     status:         ofFormData.paymentStatus==='paid' ? 'delivered' : 'pending',
     provider:       ofFormData.provider      || '',
-    reseller:       ofFormData.reseller      || 'no',
+    reseller:       (ofFormData.reseller||'no').toLowerCase(),
     reseller_name:  ofFormData.resellerName  || '',
   };
   if(!ofEditingId) fullOrder.created_at = new Date().toISOString();
