@@ -1829,25 +1829,55 @@ function getOrderNumber(o, keys=[], fallback=0){
   const n=parseFloat(String(raw).replace(',','.'));
   return Number.isFinite(n)?n:fallback;
 }
-function getOrderSell(o){return getOrderNumber(o,['sell_price','sellPrice','price','total'],0);}
-function getOrderCost(o){return getOrderNumber(o,['cost','cost_price','costPrice','buy_price','buyPrice'],0);}
-function getOrderEmail(o){return getOrderField(o,['sub_email','subEmail','customer_email','email'],'—');}
+function getOrderItems(o){return Array.isArray(o?.items)?o.items:[];}
+function getOrderMeta(o){
+  const firstItem=getOrderItems(o)[0]||{};
+  const meta=firstItem.meta||firstItem.order_meta||{};
+  return (meta&&typeof meta==='object')?meta:{};
+}
+function getOrderSell(o){
+  const direct=getOrderNumber(o,['sell_price','sellPrice','price','total'],NaN);
+  if(Number.isFinite(direct)) return direct;
+  const fromItem=parseFloat(getOrderItems(o)[0]?.priceOption?.price);
+  return Number.isFinite(fromItem)?fromItem:0;
+}
+function getOrderCost(o){
+  const direct=getOrderNumber(o,['cost','cost_price','costPrice','buy_price','buyPrice'],NaN);
+  if(Number.isFinite(direct)) return direct;
+  return getOrderNumber(getOrderMeta(o),['cost'],0);
+}
+function getOrderEmail(o){
+  const direct=getOrderField(o,['sub_email','subEmail','customer_email','email'],'');
+  if(direct) return direct;
+  return getOrderField(getOrderMeta(o),['sub_email','subEmail','customer_email','email'],'—');
+}
 function getOrderDurationText(o){
-  const dur=getOrderField(o,['duration'], '');
+  const meta=getOrderMeta(o);
+  const dur=getOrderField(o,['duration'], getOrderField(meta,['duration'],''));
   if(!dur) return '—';
-  if(dur==='custom') return `${getOrderField(o,['custom_duration','customDuration'],'—')}d`;
+  if(dur==='custom') return `${getOrderField(o,['custom_duration','customDuration'],getOrderField(meta,['custom_duration','customDuration'],'—'))}d`;
   return dur;
 }
-function getOrderResellerName(o){return getOrderField(o,['reseller_name','resellerName'],'');}
+function getOrderResellerName(o){
+  const direct=getOrderField(o,['reseller_name','resellerName'],'');
+  if(direct) return direct;
+  return getOrderField(getOrderMeta(o),['reseller_name','resellerName'],'');
+}
+function getOrderProvider(o){
+  const direct=getOrderField(o,['provider'],'');
+  if(direct) return direct;
+  return getOrderField(getOrderMeta(o),['provider'],'');
+}
 function isResellerOrder(o){
-  const resellerFlag=String(getOrderField(o,['reseller'],'')).toLowerCase();
+  const meta=getOrderMeta(o);
+  const resellerFlag=String(getOrderField(o,['reseller'],getOrderField(meta,['reseller'],''))).toLowerCase();
   return resellerFlag==='yes'||resellerFlag==='true'||o?.reseller===true;
 }
 function getOrderProduct(o){
   const direct=getOrderField(o,['product'],'');
   if(direct) return direct;
   if(o.items&&Array.isArray(o.items)&&o.items.length){
-    return o.items.map(i=>i.productTitle||i.title||'?').filter(Boolean).join(', ')||'Unknown';
+    return o.items.map(i=>i.productTitle||i.title||i.name||'?').filter(Boolean).join(', ')||'Unknown';
   }
   return 'Unknown';
 }
@@ -1855,7 +1885,7 @@ function getOrderProduct(o){
 // Subscription status helpers (for OrderFlow orders stored in Supabase)
 function getSubStatus(o){
   // Use purchase_date if set, otherwise fall back to created_at
-  const dateStr=getOrderField(o,['purchase_date','purchaseDate','created_at'],'');
+  const dateStr=getOrderField(o,['purchase_date','purchaseDate'],getOrderField(getOrderMeta(o),['purchase_date','purchaseDate'],getOrderField(o,['created_at'],'')));
   const dur=getOrderField(o,['duration'],'monthly'); // default to monthly if no duration
   if(!dateStr)return'unknown';
   const start=new Date(dateStr),now=new Date();
@@ -1872,13 +1902,14 @@ function getSubStatus(o){
 function subStatusDot(s){const c={active:'#43e97b',expired:'#ff4d6d',soon:'#ffd166'};return c[s]||'#5a5a72';}
 function subStatusLabel(s){return{active:'Active',expired:'Expired',soon:'Expiring Soon'}[s]||'—';}
 function getExpiryDate(o){
-  const purchaseDate=getOrderField(o,['purchase_date','purchaseDate'],'');
-  const duration=getOrderField(o,['duration'],'');
+  const meta=getOrderMeta(o);
+  const purchaseDate=getOrderField(o,['purchase_date','purchaseDate'],getOrderField(meta,['purchase_date','purchaseDate'],''));
+  const duration=getOrderField(o,['duration'],getOrderField(meta,['duration'],''));
   if(!purchaseDate||!duration)return null;
   const start=new Date(purchaseDate);
   if(duration==='monthly'){const d=new Date(start);d.setMonth(d.getMonth()+1);return d;}
   if(duration==='yearly'){const d=new Date(start);d.setFullYear(d.getFullYear()+1);return d;}
-  if(duration==='custom'&&getOrderField(o,['custom_duration','customDuration'],'')){const d=new Date(start);d.setDate(d.getDate()+parseInt(getOrderField(o,['custom_duration','customDuration'],30)));return d;}
+  if(duration==='custom'&&getOrderField(o,['custom_duration','customDuration'],getOrderField(meta,['custom_duration','customDuration'],''))){const d=new Date(start);d.setDate(d.getDate()+parseInt(getOrderField(o,['custom_duration','customDuration'],getOrderField(meta,['custom_duration','customDuration'],30))));return d;}
   return null;
 }
 
@@ -2130,7 +2161,7 @@ function showOrderDetail(id){
       ${expiry?`<span style="font-size:12px;color:var(--text3)">· Expires ${expiry.toLocaleDateString()}</span>`:''}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      ${[['Customer',o.customer_name||o.buyer_number||'—'],['Phone',o.customer_phone||'—'],['Product',getOrderProduct(o)],['Email',getOrderEmail(o)],['Duration',getOrderDurationText(o).replace('d',' days')],['Provider',o.provider||'—'],['Cost','$'+cost.toFixed(2)],['Sell Price','$'+sell.toFixed(2)],['Profit','$'+profit],['Payment',o.payment_status==='paid'||o.status==='delivered'?'✅ Paid':'❌ Unpaid'],['Reseller',isResellerOrder(o)?(getOrderResellerName(o)||'Yes'):'No'],['Date',new Date(o.created_at).toLocaleDateString()]].map(([l,v])=>`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">${l}</div><div style="font-size:14px;color:var(--text)">${v}</div></div>`).join('')}
+      ${[['Customer',o.customer_name||o.buyer_number||'—'],['Phone',o.customer_phone||'—'],['Product',getOrderProduct(o)],['Email',getOrderEmail(o)],['Duration',getOrderDurationText(o).replace('d',' days')],['Provider',getOrderProvider(o)||'—'],['Cost','$'+cost.toFixed(2)],['Sell Price','$'+sell.toFixed(2)],['Profit','$'+profit],['Payment',o.payment_status==='paid'||o.status==='delivered'?'✅ Paid':'❌ Unpaid'],['Reseller',isResellerOrder(o)?(getOrderResellerName(o)||'Yes'):'No'],['Date',new Date(o.created_at).toLocaleDateString()]].map(([l,v])=>`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">${l}</div><div style="font-size:14px;color:var(--text)">${v}</div></div>`).join('')}
     </div>
     ${itemsHTML}`;
   overlay.style.display='flex';
@@ -2313,7 +2344,25 @@ async function ofSubmit(){
     id,
     customer_name:  fullOrder.customer_name,
     customer_phone: fullOrder.customer_phone,
-    items:          [],
+    items:          [{
+      productTitle: fullOrder.product || 'Unknown',
+      priceOption: {
+        label: fullOrder.duration==='custom'
+          ? `${fullOrder.custom_duration||30} Days`
+          : (fullOrder.duration||'Monthly'),
+        price: fullOrder.sell_price || fullOrder.total || 0
+      },
+      meta: {
+        cost: fullOrder.cost || 0,
+        sub_email: fullOrder.sub_email || '',
+        duration: fullOrder.duration || '',
+        custom_duration: fullOrder.custom_duration || null,
+        purchase_date: fullOrder.purchase_date || null,
+        provider: fullOrder.provider || '',
+        reseller: fullOrder.reseller || 'no',
+        reseller_name: fullOrder.reseller_name || ''
+      }
+    }],
     total:          fullOrder.total,
     status:         fullOrder.status,
     created_at:     fullOrder.created_at,
