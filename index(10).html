@@ -560,7 +560,13 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:60px 24p
 .ccc-arrow{font-size:13px;font-weight:600;color:var(--card-color,var(--accent));margin-top:4px;transition:transform .2s}
 .catalog-choose-card:hover .ccc-arrow{transform:translateX(4px)}
 @media(max-width:900px){#catalog-chooser-grid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:500px){#catalog-chooser-grid{grid-template-columns:1fr 1fr;gap:12px}.catalog-choose-card{padding:20px 16px}.ccc-icon{font-size:28px}.ccc-title{font-size:16px}.ccc-desc{display:none}}
+@media(max-width:640px){
+  #catalog-chooser-grid{grid-template-columns:1fr 1fr;gap:12px}
+  .catalog-choose-card{padding:20px 14px}
+  .ccc-icon{font-size:28px}
+  .ccc-title{font-size:15px;line-height:1.2;white-space:normal}
+  .ccc-desc{display:block;font-size:11px;line-height:1.35;white-space:normal}
+}
 
 /* ACCOUNT TYPE SELECTOR */
 .acct-type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
@@ -1189,8 +1195,10 @@ function navigate(page,productId=null,pushState=true){
 // Handle hash-based routing on load and hashchange
 function routeFromHash(){
   const hash=window.location.hash||'#/';
-  if(hash==='#/products'||hash.startsWith('#/products')&&!hash.includes('/',11)){navigate('products',null,false);return;}
-  if(hash.startsWith('#/products/')){const id=hash.replace('#/products/','');navigate('detail',id,false);return;}
+  const clean=hash.replace(/^#/, '');
+  const detailMatch=clean.match(/^\/products\/([^/]+)$/);
+  if(detailMatch){navigate('detail',decodeURIComponent(detailMatch[1]),false);return;}
+  if(clean==='/products'){navigate('products',null,false);return;}
   if(hash==='#/topups'){navigate('topups',null,false);return;}
   if(hash==='#/ebooks'){navigate('ebooks',null,false);return;}
   if(hash==='#/bundles'){navigate('bundles',null,false);return;}
@@ -1808,17 +1816,53 @@ async function loadAdminTab(){
 function getMonthLabel(y,m){return new Date(y,m,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});}
 function filteredOrdersForMonth(y,m){return adminOrders.filter(o=>{const d=new Date(o.created_at);return d.getFullYear()===y&&d.getMonth()===m;});}
 
+function getOrderField(o, keys=[], fallback=''){
+  for(const key of keys){
+    const val=o?.[key];
+    if(val!==undefined&&val!==null&&String(val).trim()!=='') return val;
+  }
+  return fallback;
+}
+function getOrderNumber(o, keys=[], fallback=0){
+  const raw=getOrderField(o,keys,'');
+  if(raw==='') return fallback;
+  const n=parseFloat(String(raw).replace(',','.'));
+  return Number.isFinite(n)?n:fallback;
+}
+function getOrderSell(o){return getOrderNumber(o,['sell_price','sellPrice','price','total'],0);}
+function getOrderCost(o){return getOrderNumber(o,['cost','cost_price','costPrice','buy_price','buyPrice'],0);}
+function getOrderEmail(o){return getOrderField(o,['sub_email','subEmail','customer_email','email'],'—');}
+function getOrderDurationText(o){
+  const dur=getOrderField(o,['duration'], '');
+  if(!dur) return '—';
+  if(dur==='custom') return `${getOrderField(o,['custom_duration','customDuration'],'—')}d`;
+  return dur;
+}
+function getOrderResellerName(o){return getOrderField(o,['reseller_name','resellerName'],'');}
+function isResellerOrder(o){
+  const resellerFlag=String(getOrderField(o,['reseller'],'')).toLowerCase();
+  return resellerFlag==='yes'||resellerFlag==='true'||o?.reseller===true;
+}
+function getOrderProduct(o){
+  const direct=getOrderField(o,['product'],'');
+  if(direct) return direct;
+  if(o.items&&Array.isArray(o.items)&&o.items.length){
+    return o.items.map(i=>i.productTitle||i.title||'?').filter(Boolean).join(', ')||'Unknown';
+  }
+  return 'Unknown';
+}
+
 // Subscription status helpers (for OrderFlow orders stored in Supabase)
 function getSubStatus(o){
   // Use purchase_date if set, otherwise fall back to created_at
-  const dateStr=o.purchase_date||o.created_at;
-  const dur=o.duration||'monthly'; // default to monthly if no duration
+  const dateStr=getOrderField(o,['purchase_date','purchaseDate','created_at'],'');
+  const dur=getOrderField(o,['duration'],'monthly'); // default to monthly if no duration
   if(!dateStr)return'unknown';
   const start=new Date(dateStr),now=new Date();
   let end;
   if(dur==='monthly'){end=new Date(start);end.setMonth(end.getMonth()+1);}
   else if(dur==='yearly'){end=new Date(start);end.setFullYear(end.getFullYear()+1);}
-  else if(dur==='custom'&&(o.custom_duration||o.customDuration)){end=new Date(start);end.setDate(end.getDate()+parseInt(o.custom_duration||o.customDuration||30));}
+  else if(dur==='custom'&&getOrderField(o,['custom_duration','customDuration'],'')){end=new Date(start);end.setDate(end.getDate()+parseInt(getOrderField(o,['custom_duration','customDuration'],30)));}
   else{end=new Date(start);end.setMonth(end.getMonth()+1);}// default 1 month
   const daysLeft=Math.ceil((end-now)/86400000);
   if(daysLeft<0)return'expired';
@@ -1828,11 +1872,13 @@ function getSubStatus(o){
 function subStatusDot(s){const c={active:'#43e97b',expired:'#ff4d6d',soon:'#ffd166'};return c[s]||'#5a5a72';}
 function subStatusLabel(s){return{active:'Active',expired:'Expired',soon:'Expiring Soon'}[s]||'—';}
 function getExpiryDate(o){
-  if(!o.purchase_date||!o.duration)return null;
-  const start=new Date(o.purchase_date);
-  if(o.duration==='monthly'){const d=new Date(start);d.setMonth(d.getMonth()+1);return d;}
-  if(o.duration==='yearly'){const d=new Date(start);d.setFullYear(d.getFullYear()+1);return d;}
-  if(o.duration==='custom'&&o.custom_duration){const d=new Date(start);d.setDate(d.getDate()+parseInt(o.custom_duration));return d;}
+  const purchaseDate=getOrderField(o,['purchase_date','purchaseDate'],'');
+  const duration=getOrderField(o,['duration'],'');
+  if(!purchaseDate||!duration)return null;
+  const start=new Date(purchaseDate);
+  if(duration==='monthly'){const d=new Date(start);d.setMonth(d.getMonth()+1);return d;}
+  if(duration==='yearly'){const d=new Date(start);d.setFullYear(d.getFullYear()+1);return d;}
+  if(duration==='custom'&&getOrderField(o,['custom_duration','customDuration'],'')){const d=new Date(start);d.setDate(d.getDate()+parseInt(getOrderField(o,['custom_duration','customDuration'],30)));return d;}
   return null;
 }
 
@@ -1843,9 +1889,8 @@ function renderAdminDash(){
   let totalRevenue=0,totalCost=0,activeCount=0,expiredCount=0,soonCount=0,paidCount=0,unpaidCount=0;
   const productMap={},resellerMap={};
   orders.forEach(o=>{
-    const sell=parseFloat(o.sell_price||o.total||0);
-    // cost field may be stored as 'cost' (OrderFlow) or embedded differently
-    const cost=parseFloat(o.cost||0);
+    const sell=getOrderSell(o);
+    const cost=getOrderCost(o);
     totalRevenue+=sell;totalCost+=cost;
     // subscription status — use purchase_date OR created_at as start date
     const st=getSubStatus(o);
@@ -1856,15 +1901,11 @@ function renderAdminDash(){
     const isPaid=o.payment_status==='paid'||o.status==='delivered'||o.status==='paid';
     if(isPaid)paidCount++;else unpaidCount++;
     // product name: try all possible locations
-    let prod='Unknown';
-    if(o.product&&o.product.trim()&&o.product.trim()!=='') prod=o.product.trim();
-    else if(o.items&&Array.isArray(o.items)&&o.items.length){
-      prod=o.items.map(i=>i.productTitle||i.title||'?').filter(Boolean).join(', ')||'Unknown';
-    }
+    const prod=getOrderProduct(o);
     productMap[prod]=(productMap[prod]||0)+1;
     // reseller: check reseller_name and resellerName
-    const resellerName=o.reseller_name||o.resellerName||'';
-    const isReseller=(o.reseller==='yes'||o.reseller===true)&&resellerName;
+    const resellerName=getOrderResellerName(o);
+    const isReseller=isResellerOrder(o)&&resellerName;
     if(isReseller){
       if(!resellerMap[resellerName])resellerMap[resellerName]={count:0,revenue:0,cost:0};
       resellerMap[resellerName].count++;
@@ -1881,7 +1922,7 @@ function renderAdminDash(){
   const dailyOrders=Array(daysInMonth).fill(0);
   orders.forEach(o=>{
     const day=new Date(o.created_at).getDate()-1;
-    if(day>=0&&day<daysInMonth){dailyRevenue[day]+=(parseFloat(o.sell_price||o.total||0));dailyOrders[day]++;}
+    if(day>=0&&day<daysInMonth){dailyRevenue[day]+=getOrderSell(o);dailyOrders[day]++;}
   });
   const labels=Array.from({length:daysInMonth},(_,i)=>String(i+1));
 
@@ -1966,8 +2007,8 @@ function renderAdminOrders(){
   const rows=orders.map(o=>{
     const status=getSubStatus(o);
     const dotColor=subStatusDot(status);
-    const sell=parseFloat(o.sell_price||o.total||0);
-    const cost=parseFloat(o.cost||0);
+    const sell=getOrderSell(o);
+    const cost=getOrderCost(o);
     const profit=(sell-cost).toFixed(2);
     const expiry=getExpiryDate(o);
     const expiryStr=expiry?expiry.toLocaleDateString():'—';
@@ -1976,9 +2017,9 @@ function renderAdminOrders(){
       <td style="padding:13px 14px"><span style="display:inline-flex;align-items:center;gap:7px;font-size:12px"><span style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0"></span>${subStatusLabel(status)}</span></td>
       <td style="padding:13px 14px;font-size:13px;color:var(--text2);font-family:monospace">${o.id.substring(0,10)}…</td>
       <td style="padding:13px 14px"><div style="font-weight:600;font-size:13px">${o.customer_name||o.buyer_number||'—'}</div><div style="font-size:11px;color:var(--accent2)">${o.customer_phone||o.buyer_number||''}</div></td>
-      <td style="padding:13px 14px;font-size:13px">${o.product||(o.items&&o.items.map?o.items.map(i=>i.productTitle).join(', '):'—')}</td>
-      <td style="padding:13px 14px;font-size:13px;color:var(--text2)">${o.sub_email||o.customer_email||'—'}</td>
-      <td style="padding:13px 14px;font-size:13px">${o.duration==='custom'?(o.custom_duration+'d'):(o.duration||'—')}</td>
+      <td style="padding:13px 14px;font-size:13px">${getOrderProduct(o)}</td>
+      <td style="padding:13px 14px;font-size:13px;color:var(--text2)">${getOrderEmail(o)}</td>
+      <td style="padding:13px 14px;font-size:13px">${getOrderDurationText(o)}</td>
       <td style="padding:13px 14px;font-size:13px;color:var(--text2)">$${cost.toFixed(2)}</td>
       <td style="padding:13px 14px;font-family:Syne,sans-serif;font-weight:700;color:var(--accent3)">$${sell.toFixed(2)}</td>
       <td style="padding:13px 14px;font-size:13px;color:${parseFloat(profit)>=0?'#43e97b':'#ff4d6d'}">$${profit}</td>
@@ -2039,20 +2080,20 @@ function filterAdminOrders(){
   const q=(document.getElementById('orders-search')?.value||'').toLowerCase();
   const tbody=document.getElementById('admin-orders-tbody');if(!tbody)return;
   const orders=filteredOrdersForMonth(adminYear,adminMonth);
-  const filtered=q?orders.filter(o=>(o.customer_name||'').toLowerCase().includes(q)||(o.customer_phone||'').toLowerCase().includes(q)||(o.product||'').toLowerCase().includes(q)||(o.sub_email||'').toLowerCase().includes(q)):orders;
+  const filtered=q?orders.filter(o=>(o.customer_name||'').toLowerCase().includes(q)||(o.customer_phone||'').toLowerCase().includes(q)||getOrderProduct(o).toLowerCase().includes(q)||String(getOrderEmail(o)||'').toLowerCase().includes(q)):orders;
   if(!filtered.length){tbody.innerHTML=`<tr><td colspan="13" style="padding:60px;text-align:center;color:var(--text3)">No matching orders.</td></tr>`;return;}
   tbody.innerHTML=filtered.map(o=>{
     const status=getSubStatus(o),dotColor=subStatusDot(status);
-    const sell=parseFloat(o.sell_price||o.total||0),cost=parseFloat(o.cost||0),profit=(sell-cost).toFixed(2);
+    const sell=getOrderSell(o),cost=getOrderCost(o),profit=(sell-cost).toFixed(2);
     const expiry=getExpiryDate(o),expiryStr=expiry?expiry.toLocaleDateString():'—';
     const isPaid=o.payment_status==='paid'||o.status==='delivered';
     return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="showOrderDetail('${o.id}')">
       <td style="padding:13px 14px"><span style="display:inline-flex;align-items:center;gap:7px;font-size:12px"><span style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0"></span>${subStatusLabel(status)}</span></td>
       <td style="padding:13px 14px;font-size:12px;color:var(--text2);font-family:monospace">${o.id.substring(0,10)}…</td>
       <td style="padding:13px 14px"><div style="font-weight:600;font-size:13px">${o.customer_name||o.buyer_number||'—'}</div><div style="font-size:11px;color:var(--accent2)">${o.customer_phone||''}</div></td>
-      <td style="padding:13px 14px;font-size:13px">${o.product||(o.items&&o.items.map?o.items.map(i=>i.productTitle).join(', '):'—')}</td>
-      <td style="padding:13px 14px;font-size:12px;color:var(--text2)">${o.sub_email||o.customer_email||'—'}</td>
-      <td style="padding:13px 14px;font-size:12px">${o.duration==='custom'?(o.custom_duration+'d'):(o.duration||'—')}</td>
+      <td style="padding:13px 14px;font-size:13px">${getOrderProduct(o)}</td>
+      <td style="padding:13px 14px;font-size:12px;color:var(--text2)">${getOrderEmail(o)}</td>
+      <td style="padding:13px 14px;font-size:12px">${getOrderDurationText(o)}</td>
       <td style="padding:13px 14px;font-size:13px;color:var(--text2)">$${cost.toFixed(2)}</td>
       <td style="padding:13px 14px;font-family:Syne,sans-serif;font-weight:700;color:var(--accent3)">$${sell.toFixed(2)}</td>
       <td style="padding:13px 14px;font-size:13px;color:${parseFloat(profit)>=0?'#43e97b':'#ff4d6d'}">$${profit}</td>
@@ -2070,7 +2111,7 @@ function filterAdminOrders(){
 function showOrderDetail(id){
   const o=adminOrders.find(x=>x.id===id);if(!o)return;
   const status=getSubStatus(o),expiry=getExpiryDate(o);
-  const sell=parseFloat(o.sell_price||o.total||0),cost=parseFloat(o.cost||0),profit=(sell-cost).toFixed(2);
+  const sell=getOrderSell(o),cost=getOrderCost(o),profit=(sell-cost).toFixed(2);
   const overlay=document.getElementById('order-detail-overlay');
   const modal=document.getElementById('order-detail-modal');
   if(!overlay||!modal)return;
@@ -2089,7 +2130,7 @@ function showOrderDetail(id){
       ${expiry?`<span style="font-size:12px;color:var(--text3)">· Expires ${expiry.toLocaleDateString()}</span>`:''}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      ${[['Customer',o.customer_name||o.buyer_number||'—'],['Phone',o.customer_phone||'—'],['Product',o.product||(o.items?o.items.map(i=>i.productTitle).join(', '):'—')],['Email',o.sub_email||o.customer_email||'—'],['Duration',o.duration==='custom'?(o.custom_duration+' days'):(o.duration||'—')],['Provider',o.provider||'—'],['Cost','$'+cost.toFixed(2)],['Sell Price','$'+sell.toFixed(2)],['Profit','$'+profit],['Payment',o.payment_status==='paid'||o.status==='delivered'?'✅ Paid':'❌ Unpaid'],['Reseller',o.reseller==='yes'?(o.reseller_name||'Yes'):'No'],['Date',new Date(o.created_at).toLocaleDateString()]].map(([l,v])=>`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">${l}</div><div style="font-size:14px;color:var(--text)">${v}</div></div>`).join('')}
+      ${[['Customer',o.customer_name||o.buyer_number||'—'],['Phone',o.customer_phone||'—'],['Product',getOrderProduct(o)],['Email',getOrderEmail(o)],['Duration',getOrderDurationText(o).replace('d',' days')],['Provider',o.provider||'—'],['Cost','$'+cost.toFixed(2)],['Sell Price','$'+sell.toFixed(2)],['Profit','$'+profit],['Payment',o.payment_status==='paid'||o.status==='delivered'?'✅ Paid':'❌ Unpaid'],['Reseller',isResellerOrder(o)?(getOrderResellerName(o)||'Yes'):'No'],['Date',new Date(o.created_at).toLocaleDateString()]].map(([l,v])=>`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">${l}</div><div style="font-size:14px;color:var(--text)">${v}</div></div>`).join('')}
     </div>
     ${itemsHTML}`;
   overlay.style.display='flex';
