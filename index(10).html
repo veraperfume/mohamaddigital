@@ -1909,8 +1909,9 @@ function isResellerOrder(o){
 function getOrderProduct(o){
   const direct=getOrderField(o,['product'],'');
   if(direct) return direct;
-  if(o.items&&Array.isArray(o.items)&&o.items.length){
-    return o.items.map(i=>i.productTitle||i.title||i.name||'?').filter(Boolean).join(', ')||'Unknown';
+  const items=getOrderItems(o);
+  if(items.length){
+    return items.map(i=>i.productTitle||i.title||i.name||'?').filter(Boolean).join(', ')||'Unknown';
   }
   return 'Unknown';
 }
@@ -2185,7 +2186,8 @@ function showOrderDetail(id){
   const overlay=document.getElementById('order-detail-overlay');
   const modal=document.getElementById('order-detail-modal');
   if(!overlay||!modal)return;
-  const itemsHTML=o.items&&o.items.length?`<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Items</div>${o.items.map(i=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border)"><span>${i.productTitle||'?'} (${i.priceOption?.label||''})</span><span style="color:var(--accent3)">$${i.priceOption?.price||0}</span></div>`).join('')}</div>`:'';
+  const normalizedItems=getOrderItems(o);
+  const itemsHTML=normalizedItems.length?`<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Items</div>${normalizedItems.map(i=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border)"><span>${i.productTitle||i.title||'?'} (${i.priceOption?.label||''})</span><span style="color:var(--accent3)">$${i.priceOption?.price||i.price||0}</span></div>`).join('')}</div>`:'';
   modal.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:20px">
       <div>
@@ -2357,6 +2359,26 @@ async function ofSubmit(){
   ofFormData.cost = parseMoney(ofFormData.cost);
   ofFormData.sellPrice = parseMoney(ofFormData.sellPrice);
   const id = ofEditingId || 'ORD-' + Date.now();
+  const orderItemPayload = [{
+    productTitle: ofFormData.product || 'Unknown',
+    priceOption: {
+      label: ofFormData.duration==='custom'
+        ? `${parseInt(ofFormData.customDuration)||30} Days`
+        : (ofFormData.duration||'Monthly'),
+      price: parseMoney(ofFormData.sellPrice)
+    },
+    meta: {
+      cost: parseMoney(ofFormData.cost),
+      sub_email: ofFormData.subEmail || '',
+      duration: ofFormData.duration || '',
+      custom_duration: ofFormData.duration==='custom' ? (parseInt(ofFormData.customDuration)||30) : null,
+      purchase_date: ofFormData.purchaseDate || null,
+      provider: ofFormData.provider || '',
+      reseller: (ofFormData.reseller||'no').toLowerCase(),
+      reseller_name: ofFormData.resellerName || '',
+      sell_price: parseMoney(ofFormData.sellPrice)
+    }
+  }];
 
   // Full order with all new columns
   const fullOrder = {
@@ -2376,6 +2398,7 @@ async function ofSubmit(){
     provider:       ofFormData.provider      || '',
     reseller:       (ofFormData.reseller||'no').toLowerCase(),
     reseller_name:  ofFormData.resellerName  || '',
+    items:          orderItemPayload,
   };
   if(!ofEditingId) fullOrder.created_at = new Date().toISOString();
   else fullOrder.created_at = (adminOrders.find(o=>o.id===ofEditingId)||{}).created_at || new Date().toISOString();
@@ -2385,25 +2408,7 @@ async function ofSubmit(){
     id,
     customer_name:  fullOrder.customer_name,
     customer_phone: fullOrder.customer_phone,
-    items:          [{
-      productTitle: fullOrder.product || 'Unknown',
-      priceOption: {
-        label: fullOrder.duration==='custom'
-          ? `${fullOrder.custom_duration||30} Days`
-          : (fullOrder.duration||'Monthly'),
-        price: fullOrder.sell_price || fullOrder.total || 0
-      },
-      meta: {
-        cost: fullOrder.cost || 0,
-        sub_email: fullOrder.sub_email || '',
-        duration: fullOrder.duration || '',
-        custom_duration: fullOrder.custom_duration || null,
-        purchase_date: fullOrder.purchase_date || null,
-        provider: fullOrder.provider || '',
-        reseller: fullOrder.reseller || 'no',
-        reseller_name: fullOrder.reseller_name || ''
-      }
-    }],
+    items:          orderItemPayload,
     total:          fullOrder.total,
     status:         fullOrder.status,
     created_at:     fullOrder.created_at,
