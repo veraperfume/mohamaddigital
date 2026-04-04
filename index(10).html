@@ -640,8 +640,6 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:60px 24p
     <button class="nav-link" onclick="navigate('topups')" id="nav-topups">Top-ups</button>
     <button class="nav-link" onclick="navigate('ebooks')" id="nav-ebooks">eBooks</button>
     <button class="nav-link" onclick="navigate('bundles')" id="nav-bundles">Bundles</button>
-    <button class="nav-theme" onclick="cycleTheme()">Theme</button>
-    <button class="nav-theme" onclick="openQuickNav()">⌘K</button>
     <button class="nav-link nav-cart" onclick="navigate('cart')">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
       Cart <span class="cart-badge" id="cart-badge">0</span>
@@ -660,7 +658,6 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:60px 24p
     <button class="mobile-nav-link" onclick="navigate('topups');toggleMobileMenu()">🎮 Top-ups</button>
     <button class="mobile-nav-link" onclick="navigate('ebooks');toggleMobileMenu()">📚 eBooks</button>
     <button class="mobile-nav-link" onclick="navigate('bundles');toggleMobileMenu()">🎁 Bundles</button>
-    <button class="mobile-nav-link" onclick="openQuickNav();toggleMobileMenu()">⚡ Quick Search</button>
     <button class="mobile-nav-link" onclick="navigate('cart');toggleMobileMenu()">🛒 Cart</button>
   </div>
 </div>
@@ -2813,6 +2810,14 @@ function renderProductModalContent(){
     <div class="form-group" style="margin-bottom:14px">
       <label class="form-label">Image URL</label>
       <input class="form-input" type="url" id="ep-image" value="${esc(editProduct.image_url||editProduct.imageUrl||'')}" placeholder="https://..."/>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">
+        <label style="font-size:12px;color:var(--text2)">or upload image:</label>
+        <input class="form-input" type="file" id="ep-image-file" accept="image/*" style="padding:8px 10px;max-width:260px"/>
+        <button type="button" class="btn-secondary" style="padding:8px 12px;font-size:12px" onclick="handleProductImageUpload()">Use file</button>
+      </div>
+      <div id="ep-image-preview" style="margin-top:10px;${(editProduct.image_url||editProduct.imageUrl)?'':'display:none'}">
+        <img src="${esc(editProduct.image_url||editProduct.imageUrl||'')}" alt="preview" style="width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid var(--border)"/>
+      </div>
     </div>
 
     <div class="form-group" style="margin-bottom:14px">
@@ -2849,7 +2854,14 @@ function renderProductModalContent(){
     document.getElementById('ep-title')?.addEventListener('input',e=>editProduct.title=e.target.value);
     document.getElementById('ep-category')?.addEventListener('input',e=>editProduct.category=e.target.value);
     document.getElementById('ep-description')?.addEventListener('input',e=>editProduct.description=e.target.value);
-    document.getElementById('ep-image')?.addEventListener('input',e=>editProduct.image_url=e.target.value);
+    document.getElementById('ep-image')?.addEventListener('input',e=>{
+      editProduct.image_url=e.target.value;
+      const prev=document.getElementById('ep-image-preview');
+      if(prev){
+        prev.style.display=e.target.value?'block':'none';
+        const img=prev.querySelector('img');if(img)img.src=e.target.value||'';
+      }
+    });
     document.getElementById('ep-delivery')?.addEventListener('input',e=>editProduct.delivery_info=e.target.value);
     document.getElementById('ep-featured')?.addEventListener('change',e=>editProduct.featured=e.target.checked);
 
@@ -2868,6 +2880,28 @@ function collectAndSaveProduct(){
   editProduct.delivery_info=document.getElementById('ep-delivery')?.value||editProduct.delivery_info||'';
   editProduct.featured=document.getElementById('ep-featured')?.checked||false;
   saveProduct();
+}
+
+function handleProductImageUpload(){
+  const input=document.getElementById('ep-image-file');
+  const urlInput=document.getElementById('ep-image');
+  if(!input||!input.files||!input.files[0]){showToast('Choose an image first',true);return;}
+  const file=input.files[0];
+  if(file.size>3*1024*1024){showToast('Image too large (max 3MB)',true);return;}
+  const reader=new FileReader();
+  reader.onload=()=>{
+    const dataUrl=String(reader.result||'');
+    editProduct.image_url=dataUrl;
+    if(urlInput)urlInput.value=dataUrl;
+    const prev=document.getElementById('ep-image-preview');
+    if(prev){
+      prev.style.display='block';
+      const img=prev.querySelector('img');if(img)img.src=dataUrl;
+    }
+    showToast('Image uploaded');
+  };
+  reader.onerror=()=>showToast('Failed to process image',true);
+  reader.readAsDataURL(file);
 }
 
 
@@ -3529,10 +3563,6 @@ window.addEventListener('scroll',()=>{
 
 // Method 1: Keyboard shortcut Ctrl+Shift+A
 document.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='k') {
-    e.preventDefault();
-    openQuickNav();
-  }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'A') {
     e.preventDefault();
     navigate('admin');
@@ -3565,7 +3595,7 @@ document.querySelector('.logo').addEventListener('click', () => {
 // ============================================================
 // INIT
 // ============================================================
-applyTheme(localStorage.getItem('mhmd_theme')||'default');
+applyTheme('default');
 updateCartBadge();
 loadData();
 updateBottomTabs('home');
