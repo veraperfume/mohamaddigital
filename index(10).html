@@ -503,8 +503,12 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:60px 24p
 .btab span{font-size:10px;font-weight:600;letter-spacing:.2px;font-family:'DM Sans',sans-serif}
 .btab-cart-wrap{position:relative}
 .btab-badge{position:absolute;top:-4px;right:-4px;background:var(--accent);color:white;font-size:9px;font-weight:700;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;min-width:16px}
+.mobile-cta-bar{display:none;position:fixed;left:12px;right:12px;bottom:66px;z-index:151;background:rgba(10,16,30,.92);border:1px solid var(--border2);border-radius:14px;padding:10px 12px;backdrop-filter:blur(14px);align-items:center;justify-content:space-between;gap:10px}
+.mobile-cta-text{font-size:12px;color:var(--text2)}
+.mobile-cta-btn{background:linear-gradient(135deg,var(--accent),var(--cyan));border:none;border-radius:10px;color:white;font-size:12px;font-weight:700;padding:10px 14px;cursor:pointer;white-space:nowrap}
 @media(max-width:768px){
   .bottom-tab-bar{display:block}
+  .mobile-cta-bar{display:flex}
   .wa-float{bottom:80px;right:16px;width:48px;height:48px;border-radius:13px}
   .wa-float svg{width:22px;height:22px}
   /* Extra bottom padding so content isn't hidden behind tab bar */
@@ -917,6 +921,12 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:60px 24p
 <!-- TOAST -->
 <div class="toast" id="toast"><svg class="toast-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg><span id="toast-msg">Added!</span></div>
 
+<!-- MOBILE CTA BAR -->
+<div class="mobile-cta-bar" id="mobile-cta-bar">
+  <div class="mobile-cta-text" id="mobile-cta-text">Ready to order? 1 item in cart</div>
+  <button class="mobile-cta-btn" id="mobile-cta-btn" onclick="navigate('cart')">Checkout</button>
+</div>
+
 <!-- BOTTOM TAB BAR (mobile only) -->
 <div class="bottom-tab-bar">
   <div class="bottom-tabs">
@@ -1065,11 +1075,13 @@ function buildBundleCard(bundle, cardIndex=0){
   const inclItems = (bundle.includes||[]);
   const best = getLowestPrice(bundle);
   const disc = getDiscount(bundle);
+  const popular = bundle.featured || cardIndex===0;
   return `
   <div class="bundle-card" style="animation-delay:${cardIndex*80}ms" onclick="openCatalogDetail('${bundle.id}','bundle')"
     onmouseover="this.style.borderColor='var(--accent)';this.style.transform='translateY(-3px)'" onmouseout="this.style.borderColor='var(--border)';this.style.transform=''">
     <div style="position:absolute;top:0;right:0;width:200px;height:200px;background:radial-gradient(circle at top right,rgba(29,110,245,.08),transparent);pointer-events:none"></div>
     ${disc>=10?`<div style="position:absolute;top:16px;right:16px;background:linear-gradient(135deg,var(--accent),var(--cyan));color:white;font-size:11px;font-weight:700;padding:4px 12px;border-radius:100px">Save ${disc}%</div>`:''}
+    ${popular?`<div style="position:absolute;top:16px;left:16px;background:rgba(16,217,138,.14);border:1px solid rgba(16,217,138,.3);color:var(--green);font-size:10px;font-weight:700;padding:4px 10px;border-radius:100px;letter-spacing:.5px;text-transform:uppercase">Most Popular</div>`:''}
     <div style="margin-bottom:20px">
       <div style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">🎁 Bundle</div>
       <div style="font-family:Syne,sans-serif;font-size:22px;font-weight:800;color:var(--text);margin-bottom:8px">${bundle.title}</div>
@@ -1125,6 +1137,25 @@ function openCatalogDetail(id, type){
 // CART
 // ============================================================
 function saveCart(){localStorage.setItem('mhmd_cart',JSON.stringify(cart));updateCartBadge();}
+function updateMobileCTA(){
+  const bar=document.getElementById('mobile-cta-bar');
+  const text=document.getElementById('mobile-cta-text');
+  const btn=document.getElementById('mobile-cta-btn');
+  if(!bar||!text||!btn)return;
+  const mobile=window.innerWidth<=768;
+  if(!mobile||currentPage==='admin'||currentPage==='cart'||currentPage==='success'){bar.style.display='none';return;}
+  const count=cart.length;
+  if(count>0){
+    text.textContent=`${count} item${count>1?'s':''} in cart`;
+    btn.textContent='Checkout';
+    btn.onclick=()=>navigate('cart');
+  }else{
+    text.textContent='Explore best-selling subscriptions';
+    btn.textContent='Browse';
+    btn.onclick=()=>navigate('products');
+  }
+  bar.style.display='flex';
+}
 function updateCartBadge(){
   const n=cart.length;
   const badge=document.getElementById('cart-badge');
@@ -1132,6 +1163,7 @@ function updateCartBadge(){
   // Also update bottom tab badge
   const btabBadge=document.getElementById('btab-cart-badge');
   if(btabBadge){btabBadge.textContent=n;btabBadge.style.display=n>0?'flex':'none';}
+  updateMobileCTA();
 }
 
 function updateBottomTabs(page){
@@ -1143,6 +1175,13 @@ function addToCart(productId,priceOption,accountType){
   const p=allProducts.find(x=>x.id===productId);if(!p)return;
   cart.push({productId,productTitle:p.title,imageUrl:p.image_url||p.imageUrl||'',priceOption,accountType});
   saveCart();showToast(`${p.title} added to cart!`);
+}
+function addQuickUpsell(productId){
+  const p=allProducts.find(x=>String(x.id)===String(productId));if(!p)return;
+  const best=getLowestPrice(p);
+  const priceOption=(p.prices&&p.prices.length?p.prices.find(x=>x.price===best.price)||p.prices[0]:{label:'Default',price:best.price||0});
+  addToCart(p.id,priceOption,p.account_type||'');
+  renderCart();
 }
 function removeFromCart(i){cart.splice(i,1);saveCart();renderCart();}
 
@@ -1188,6 +1227,7 @@ function navigate(page,productId=null,pushState=true){
 
   // Sync bottom tab bar
   updateBottomTabs(page);
+  updateMobileCTA();
 
   // Update back button label based on where user came from
   const backLabel=document.getElementById('detail-back-label');
@@ -1664,6 +1704,9 @@ function renderCart(){
     return;
   }
   const total=cart.reduce((a,b)=>a+(b.priceOption?.price||0),0);
+  const inCartIds=new Set(cart.map(i=>String(i.productId)));
+  const upsellCandidate=allProducts.filter(p=>!inCartIds.has(String(p.id))).sort((a,b)=>(b.featured?1:0)-(a.featured?1:0))[0]||null;
+  const upsellPrice=upsellCandidate?getLowestPrice(upsellCandidate):null;
   layout.innerHTML=`
   <div class="cart-items">
     ${cart.map((item,i)=>`
@@ -1682,6 +1725,11 @@ function renderCart(){
   <div class="cart-summary">
     <div class="summary-title">Order summary</div>
     ${cart.map(item=>`<div class="summary-row"><span>${item.productTitle} (${item.priceOption?.label})</span><span>$${item.priceOption?.price}</span></div>`).join('')}
+    ${upsellCandidate&&upsellPrice?`<div style="margin:12px 0 4px;background:rgba(29,110,245,.08);border:1px solid rgba(29,110,245,.2);border-radius:12px;padding:12px">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--accent3);margin-bottom:6px">🔥 Quick add</div>
+      <div style="font-size:13px;color:var(--text);margin-bottom:8px"><strong>${upsellCandidate.title}</strong> — from $${upsellPrice.price}</div>
+      <button class="btn-secondary" style="width:100%;justify-content:center;padding:10px 12px;font-size:12px" onclick="addQuickUpsell('${upsellCandidate.id}')">Add in 1 click</button>
+    </div>`:''}
     <div class="summary-total"><span class="label">Total</span><span class="amount">$${total.toFixed(2)}</span></div>
     <div class="refund-notice">
       <svg width="16" height="16" fill="none" stroke="var(--green)" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;margin-top:2px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -2009,6 +2057,18 @@ function renderAdminDash(){
     }
   });
   const avgOrder=orders.length?(totalRevenue/orders.length):0;
+  const customerMap={};
+  orders.forEach(o=>{
+    const key=(o.customer_phone||o.customer_name||'Unknown').toString().trim()||'Unknown';
+    if(!customerMap[key])customerMap[key]={orders:0,revenue:0};
+    customerMap[key].orders++;
+    customerMap[key].revenue+=getOrderSell(o);
+  });
+  const customerList=Object.values(customerMap);
+  const uniqueCustomers=customerList.length;
+  const repeatCustomers=customerList.filter(c=>c.orders>1).length;
+  const avgCustomerValue=uniqueCustomers?(customerList.reduce((a,c)=>a+c.revenue,0)/uniqueCustomers):0;
+  const repeatRate=uniqueCustomers?Math.round((repeatCustomers/uniqueCustomers)*100):0;
 
   // Daily chart data
   const daysInMonth=new Date(adminYear,adminMonth+1,0).getDate();
@@ -2064,6 +2124,11 @@ function renderAdminDash(){
 
   <div class="chart-wrap"><div class="chart-title">Daily revenue — ${getMonthLabel(adminYear,adminMonth)}</div><canvas id="revenue-chart" height="80"></canvas></div>
   <div class="chart-wrap"><div class="chart-title">Daily orders — ${getMonthLabel(adminYear,adminMonth)}</div><canvas id="orders-chart" height="80"></canvas></div>
+  <div class="kpi-grid" style="margin-top:0">
+    <div class="kpi-card green"><div class="kpi-label">Unique Customers</div><div class="kpi-value">${uniqueCustomers}</div><div class="kpi-sub">${repeatCustomers} repeat buyers</div></div>
+    <div class="kpi-card purple"><div class="kpi-label">Avg Customer Value</div><div class="kpi-value">$${avgCustomerValue.toFixed(2)}</div><div class="kpi-sub">Revenue per unique customer</div></div>
+    <div class="kpi-card cyan"><div class="kpi-label">Repeat Rate</div><div class="kpi-value">${repeatRate}%</div><div class="kpi-sub">Customers with 2+ orders</div></div>
+  </div>
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:24px">
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px">
@@ -3390,6 +3455,8 @@ document.querySelector('.logo').addEventListener('click', () => {
 updateCartBadge();
 loadData();
 updateBottomTabs('home');
+updateMobileCTA();
+window.addEventListener('resize',updateMobileCTA);
 const _bb=document.getElementById('detail-back-bar');
 if(_bb)_bb.style.display='none';
 // Trigger reveal on visible elements after load
