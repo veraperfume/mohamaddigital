@@ -571,6 +571,16 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:60px 24p
 }
 @media(max-width:460px){#catalog-chooser-grid{grid-template-columns:1fr!important}}
 
+/* BUNDLES */
+.bundle-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius2);padding:28px;animation:card-appear .4s ease both;cursor:pointer;transition:all .3s;position:relative;overflow:hidden}
+.bundle-footer{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.bundle-cta{padding:12px 24px;min-width:136px;justify-content:center;text-align:center;white-space:nowrap}
+@media(max-width:640px){
+  .bundle-card{padding:22px 18px}
+  .bundle-footer{flex-direction:column;align-items:stretch}
+  .bundle-cta{width:100%;min-width:0}
+}
+
 /* ACCOUNT TYPE SELECTOR */
 .acct-type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
 .acct-type-btn{border:1px solid var(--border2);background:var(--surface);border-radius:12px;padding:12px 10px;cursor:pointer;transition:all .2s;text-align:center;font-family:'DM Sans',sans-serif}
@@ -1056,7 +1066,7 @@ function buildBundleCard(bundle, cardIndex=0){
   const best = getLowestPrice(bundle);
   const disc = getDiscount(bundle);
   return `
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius2);padding:28px;animation:card-appear .4s ease ${cardIndex*80}ms both;cursor:pointer;transition:all .3s;position:relative;overflow:hidden" onclick="openCatalogDetail('${bundle.id}','bundle')"
+  <div class="bundle-card" style="animation-delay:${cardIndex*80}ms" onclick="openCatalogDetail('${bundle.id}','bundle')"
     onmouseover="this.style.borderColor='var(--accent)';this.style.transform='translateY(-3px)'" onmouseout="this.style.borderColor='var(--border)';this.style.transform=''">
     <div style="position:absolute;top:0;right:0;width:200px;height:200px;background:radial-gradient(circle at top right,rgba(29,110,245,.08),transparent);pointer-events:none"></div>
     ${disc>=10?`<div style="position:absolute;top:16px;right:16px;background:linear-gradient(135deg,var(--accent),var(--cyan));color:white;font-size:11px;font-weight:700;padding:4px 12px;border-radius:100px">Save ${disc}%</div>`:''}
@@ -1068,12 +1078,12 @@ function buildBundleCard(bundle, cardIndex=0){
     ${inclItems.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px">
       ${inclItems.map(item=>`<span style="background:rgba(29,110,245,.1);border:1px solid rgba(29,110,245,.2);border-radius:8px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--accent3)">${item}</span>`).join('')}
     </div>`:''}
-    <div style="display:flex;justify-content:space-between;align-items:center">
+    <div class="bundle-footer">
       <div>
         <div style="font-size:11px;color:var(--text3);margin-bottom:2px">Bundle price</div>
         <div style="font-family:Syne,sans-serif;font-size:28px;font-weight:800">$${best.price}<span style="font-size:14px;color:var(--text3);text-decoration:line-through;margin-left:8px">${best.originalPrice>0?'$'+best.originalPrice:''}</span></div>
       </div>
-      <button class="btn-primary" onclick="event.stopPropagation();openCatalogDetail('${bundle.id}','bundle')" style="padding:12px 24px">Get bundle →</button>
+      <button class="btn-primary bundle-cta" onclick="event.stopPropagation();openCatalogDetail('${bundle.id}','bundle')">Get bundle →</button>
     </div>
   </div>`;
 }
@@ -2120,7 +2130,10 @@ function renderAdminOrders(){
   content.innerHTML=`
   <div class="admin-header">
     <div class="admin-title">Orders <span style="font-size:16px;color:var(--text3);font-weight:400">(${orders.length})</span></div>
-    <button class="btn-primary" style="padding:10px 20px;font-size:13px" onclick="adminTab='of-new-order';renderOrderFlowNewOrder()">+ New Order</button>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn-secondary" style="padding:10px 16px;font-size:13px" onclick="exportAdminOrdersCSV()">Export CSV</button>
+      <button class="btn-primary" style="padding:10px 20px;font-size:13px" onclick="adminTab='of-new-order';renderOrderFlowNewOrder()">+ New Order</button>
+    </div>
   </div>
   <div class="month-picker">
     <button class="month-btn" onclick="adminMonth--;if(adminMonth<0){adminMonth=11;adminYear--;}loadAdminTab()">← Prev</button>
@@ -2190,6 +2203,42 @@ function filterAdminOrders(){
       </td>
     </tr>`;
   }).join('');
+}
+
+function exportAdminOrdersCSV(){
+  const q=(document.getElementById('orders-search')?.value||'').toLowerCase();
+  const orders=filteredOrdersForMonth(adminYear,adminMonth);
+  const filtered=q?orders.filter(o=>(o.customer_name||'').toLowerCase().includes(q)||(o.customer_phone||'').toLowerCase().includes(q)||getOrderProduct(o).toLowerCase().includes(q)||String(getOrderEmail(o)||'').toLowerCase().includes(q)):orders;
+  if(!filtered.length){showToast('No orders to export',true);return;}
+
+  const headers=['Order ID','Customer','Phone','Product','Email','Duration','Cost','Sell','Profit','Payment','Reseller','Date'];
+  const rows=filtered.map(o=>[
+    o.id||'',
+    o.customer_name||'',
+    o.customer_phone||'',
+    getOrderProduct(o)||'',
+    getOrderEmail(o)||'',
+    getOrderDurationText(o)||'',
+    getOrderCost(o).toFixed(2),
+    getOrderSell(o).toFixed(2),
+    getOrderProfit(o).toFixed(2),
+    (o.payment_status==='paid'||o.status==='delivered')?'Paid':'Unpaid',
+    isResellerOrder(o)?(getOrderResellerName(o)||'Yes'):'No',
+    getOrderTimelineDate(o).toISOString().slice(0,10)
+  ]);
+
+  const escCsv=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const csv=[headers,...rows].map(r=>r.map(escCsv).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=`orders-${adminYear}-${String(adminMonth+1).padStart(2,'0')}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showToast('Orders CSV exported');
 }
 
 function showOrderDetail(id){
