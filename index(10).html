@@ -530,6 +530,7 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:60px 24p
 .count-pill strong{color:var(--accent3)}
 
 /* CATALOG CHOOSE CARDS */
+#catalog-chooser-grid{grid-template-columns:repeat(4,minmax(200px,1fr))}
 .catalog-choose-card{
   background:var(--surface);
   border:1px solid var(--border);
@@ -555,18 +556,20 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:60px 24p
 .catalog-choose-card:hover::before{opacity:1}
 .catalog-choose-card:active{transform:translateY(-3px)}
 .ccc-icon{font-size:36px;line-height:1;margin-bottom:4px}
-.ccc-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--text);letter-spacing:-.3px}
-.ccc-desc{font-size:13px;color:var(--text2);line-height:1.6;flex:1}
+.ccc-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--text);letter-spacing:-.3px;overflow-wrap:anywhere;word-break:break-word}
+.ccc-desc{font-size:13px;color:var(--text2);line-height:1.6;flex:1;overflow-wrap:anywhere;word-break:break-word}
 .ccc-arrow{font-size:13px;font-weight:600;color:var(--card-color,var(--accent));margin-top:4px;transition:transform .2s}
 .catalog-choose-card:hover .ccc-arrow{transform:translateX(4px)}
-@media(max-width:900px){#catalog-chooser-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:1300px){#catalog-chooser-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+@media(max-width:900px){#catalog-chooser-grid{grid-template-columns:repeat(2,1fr)!important}}
 @media(max-width:640px){
-  #catalog-chooser-grid{grid-template-columns:1fr 1fr;gap:12px}
+  #catalog-chooser-grid{grid-template-columns:1fr 1fr!important;gap:12px}
   .catalog-choose-card{padding:20px 14px}
   .ccc-icon{font-size:28px}
   .ccc-title{font-size:15px;line-height:1.2;white-space:normal}
   .ccc-desc{display:block;font-size:11px;line-height:1.35;white-space:normal}
 }
+@media(max-width:460px){#catalog-chooser-grid{grid-template-columns:1fr!important}}
 
 /* ACCOUNT TYPE SELECTOR */
 .acct-type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
@@ -692,7 +695,7 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:60px 24p
     <div class="section-label" style="margin-bottom:16px">What are you looking for?</div>
     <h2 class="section-title" style="margin-bottom:12px">Choose your category</h2>
     <p class="section-sub" style="margin-bottom:48px">Four ways to get the digital tools you need, all at real prices.</p>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px" id="catalog-chooser-grid">
+    <div style="display:grid;gap:16px" id="catalog-chooser-grid">
 
       <div class="catalog-choose-card" onclick="navigate('products')" style="--card-color:#1d6ef5;--card-glow:rgba(29,110,245,.15)">
         <div class="ccc-icon">📦</div>
