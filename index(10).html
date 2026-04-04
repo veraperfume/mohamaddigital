@@ -172,6 +172,19 @@ nav{display:flex;align-items:center;gap:8px}
 .section-title{font-family:'Syne',sans-serif;font-size:clamp(28px,4vw,48px);font-weight:800;letter-spacing:-1px;line-height:1.1;margin-bottom:16px}
 .section-sub{font-size:16px;color:var(--text2);max-width:500px}
 
+/* VNEXT BLOCKS */
+.prime-section{padding:90px 24px;max-width:1200px;margin:0 auto}
+.prime-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
+.prime-card{background:linear-gradient(180deg,rgba(29,110,245,.12),rgba(29,110,245,.03));border:1px solid var(--border2);border-radius:18px;padding:22px}
+.prime-card h3{font-family:'Syne',sans-serif;font-size:18px;margin-bottom:8px}
+.prime-card p{font-size:13px;color:var(--text2)}
+.compare-table{margin-top:26px;border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.compare-row{display:grid;grid-template-columns:1.2fr .8fr .8fr}
+.compare-row>div{padding:13px 14px;border-bottom:1px solid var(--border);font-size:13px}
+.compare-row.head{background:var(--bg2);font-weight:700}
+.compare-row:last-child>div{border-bottom:none}
+@media(max-width:900px){.prime-grid{grid-template-columns:1fr}.compare-row{grid-template-columns:1fr 1fr 1fr}}
+
 /* CATEGORY TABS */
 .category-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:48px 0 40px}
 .cat-tab{padding:10px 20px;border-radius:100px;border:1px solid var(--border);background:var(--bg2);color:var(--text2);font-size:14px;font-weight:500;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif}
@@ -720,6 +733,25 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:60px 24p
         <h3>100% Refund Policy</h3>
         <p>Not satisfied? You get a full refund if there's any issue we can't resolve. Your money is always safe with us.</p>
       </div>
+    </div>
+  </div>
+
+  <!-- VNEXT DIFFERENTIATOR -->
+  <div class="prime-section">
+    <div class="section-label">VNext Experience</div>
+    <div class="section-title">Built to convert. Built to retain.</div>
+    <p class="section-sub">A new generation storefront focused on trust, speed, and repeat revenue.</p>
+    <div class="prime-grid">
+      <div class="prime-card reveal"><h3>⚡ Conversion Engine</h3><p>Fast catalog discovery, quick adds, and mobile-first CTAs tuned for instant checkout decisions.</p></div>
+      <div class="prime-card reveal"><h3>🛡️ Risk-Free Promise</h3><p>Clear warranty language, transparent delivery expectations, and confidence-first purchase flow.</p></div>
+      <div class="prime-card reveal"><h3>📈 Retention Intelligence</h3><p>Admin sees customer quality metrics, repeat behavior, and margin trends — not just order count.</p></div>
+    </div>
+    <div class="compare-table reveal">
+      <div class="compare-row head"><div>What matters</div><div>Typical store</div><div>Mhmd.Digital vNext</div></div>
+      <div class="compare-row"><div>Delivery clarity</div><div>Generic promises</div><div><strong>Exact what-you-get text</strong></div></div>
+      <div class="compare-row"><div>Checkout speed</div><div>Multi-step friction</div><div><strong>WhatsApp-first fast order</strong></div></div>
+      <div class="compare-row"><div>Revenue optimization</div><div>No upsell logic</div><div><strong>In-cart quick add + bundles</strong></div></div>
+      <div class="compare-row"><div>Operator insight</div><div>Raw order list</div><div><strong>Profit + customer value KPIs</strong></div></div>
     </div>
   </div>
 
@@ -2314,6 +2346,13 @@ function renderAdminOrders(){
     <svg style="position:absolute;left:14px;top:50%;transform:translateY(-50%);opacity:.4" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input type="text" id="orders-search" placeholder="Search by name, phone or product..." oninput="filterAdminOrders()" style="width:100%;padding:11px 16px 11px 40px;background:var(--surface);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:13px;outline:none;font-family:'DM Sans',sans-serif"/>
   </div>
+  <div style="display:flex;justify-content:flex-end;margin:-8px 0 14px">
+    <select id="orders-payment-filter" class="sort-select" style="min-width:150px;padding:9px 12px" onchange="filterAdminOrders()">
+      <option value="all">All payments</option>
+      <option value="paid">Paid only</option>
+      <option value="unpaid">Unpaid only</option>
+    </select>
+  </div>
   <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius2);background:var(--surface)">
     <table style="width:100%;border-collapse:collapse" id="orders-table">
       <thead><tr style="background:var(--bg2);border-bottom:1px solid var(--border)">
@@ -2345,9 +2384,12 @@ function renderAdminOrders(){
 
 function filterAdminOrders(){
   const q=(document.getElementById('orders-search')?.value||'').toLowerCase();
+  const pay=(document.getElementById('orders-payment-filter')?.value||'all');
   const tbody=document.getElementById('admin-orders-tbody');if(!tbody)return;
   const orders=filteredOrdersForMonth(adminYear,adminMonth);
-  const filtered=q?orders.filter(o=>(o.customer_name||'').toLowerCase().includes(q)||(o.customer_phone||'').toLowerCase().includes(q)||getOrderProduct(o).toLowerCase().includes(q)||String(getOrderEmail(o)||'').toLowerCase().includes(q)):orders;
+  let filtered=q?orders.filter(o=>(o.customer_name||'').toLowerCase().includes(q)||(o.customer_phone||'').toLowerCase().includes(q)||getOrderProduct(o).toLowerCase().includes(q)||String(getOrderEmail(o)||'').toLowerCase().includes(q)):orders;
+  if(pay==='paid')filtered=filtered.filter(o=>o.payment_status==='paid'||o.status==='delivered');
+  if(pay==='unpaid')filtered=filtered.filter(o=>!(o.payment_status==='paid'||o.status==='delivered'));
   if(!filtered.length){tbody.innerHTML=`<tr><td colspan="13" style="padding:60px;text-align:center;color:var(--text3)">No matching orders.</td></tr>`;return;}
   tbody.innerHTML=filtered.map(o=>{
     const status=getSubStatus(o),dotColor=subStatusDot(status);
